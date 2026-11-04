@@ -1,0 +1,32 @@
+[target.thumbv8m.main-none-eabihf]
+# `probe-rs` provides flashing, defmt/RTT logging and stack unwinding via a
+# hardware debugger such as a Picoprobe (CMSIS-DAP).
+runner = "probe-rs run --chip RP235x"
+
+# `flip-link` is optional (it moves the stack to the start of RAM so stack
+# overflows fault instead of corrupting memory). It must be installed with
+# `cargo install flip-link` to use it.
+# linker = "flip-link"
+
+# Pass some extra options to rustc, some of which get passed on to the linker.
+#
+# * linker argument --nmagic turns off page alignment of sections (which saves
+#   flash space)
+# * linker argument -Tlink.x tells the linker to use link.x as a linker script.
+#   This is usually provided by the cortex-m-rt crate, and by default the
+#   version in that crate will include a file called `memory.x` which describes
+#   the particular memory layout for your specific chip.
+# * linker argument -Tdefmt.x also tells the linker to use `defmt.x` as a
+#   secondary linker script. This is required to make defmt_rtt work.
+rustflags = [
+  "-C", "link-arg=--nmagic",
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tdefmt.x",
+  "-C", "target-cpu=cortex-m33",
+]
+
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[env]
+DEFMT_LOG = "debug"

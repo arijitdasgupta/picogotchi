@@ -1,0 +1,11 @@
+[package]
+name = "tama"
+version = "0.1.0"
+edition = "2021"
+description = "Portable Tamagotchi P1 (E0C6S46) emulation core, ported from ArduinoGotchi/TamaLib"
+
+[dependencies]
+embedded-graphics = "0.8.1"
+
+# Host tests live here; the firmware crate depends on this crate by path.
+[dev-dependencies]

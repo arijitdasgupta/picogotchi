@@ -1,0 +1,23 @@
+[package]
+name = "picogotchi"
+version = "0.1.0"
+edition = "2021"
+description = "Tamagotchi P1 emulator for the Raspberry Pi Pico 2 (RP2350)"
+
+[dependencies]
+defmt = "0.3"
+defmt-rtt = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+embedded-hal = "1.0.0"
+# RP2350 (Raspberry Pi Pico 2).
+rp235x-hal = { version = "0.4", features = [
+    "rt",
+    "critical-section-impl",
+    "binary-info",
+] }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+ssd1306 = "0.9.0"
+embedded-graphics = "0.8.1"
+critical-section = "1.1.3"
+tama = { path = "../tama" }
