@@ -29,5 +29,5 @@ mod hw;
 pub mod debounce;
 pub mod display;
 
-pub use cpu::Tama;
+pub use cpu::{Tama, STATE_LEN};
 pub use hw::{Button, ButtonState, Lcd, ICON_NUM, LCD_HEIGHT, LCD_WIDTH};

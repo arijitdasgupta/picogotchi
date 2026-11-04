@@ -3,8 +3,13 @@ MEMORY {
      * The RP2350 has either external or internal flash.
      *
      * 2 MiB is a safe default here, although a Pico 2 has 4 MiB.
+     *
+     * The last 32 KiB is held back for saved-state storage. It is carved out of
+     * FLASH rather than just left above the image so that the linker can never
+     * place code in a sector the storage layer erases.
      */
-    FLASH : ORIGIN = 0x10000000, LENGTH = 2048K
+    FLASH : ORIGIN = 0x10000000, LENGTH = 2048K - 32K
+    SAVE  : ORIGIN = 0x101F8000, LENGTH = 32K
     /*
      * RAM consists of 8 banks, SRAM0-SRAM7, with a striped mapping.
      * This is usually good for performance, as it distributes load on
@@ -73,3 +78,7 @@ SECTIONS {
 
 PROVIDE(start_to_end = __end_block_addr - __start_block_addr);
 PROVIDE(end_to_start = __start_block_addr - __end_block_addr);
+
+/* The saved-state region, exposed to Rust so its address has a single source. */
+PROVIDE(__save_start = ORIGIN(SAVE));
+PROVIDE(__save_end = ORIGIN(SAVE) + LENGTH(SAVE));

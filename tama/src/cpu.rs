@@ -641,6 +641,83 @@ impl Tama {
             self.interrupts[i].triggered = false;
         }
     }
+
+    // -- Persistence --------------------------------------------------------
+
+    /// Serialize the machine state into `out`.
+    ///
+    /// This is the payload the firmware stores in flash, so the layout is fixed
+    /// and little-endian and is written field by field rather than by copying a
+    /// struct (which would depend on padding and compiler layout). The display
+    /// is included because the ROM's LCD state lives only in the matrix — the
+    /// display memory reads back as zero.
+    pub fn save_state(&self, out: &mut [u8; STATE_LEN]) {
+        let mut w = Writer::new(out);
+        w.u16(self.pc);
+        w.u16(self.next_pc);
+        w.u16(self.x);
+        w.u16(self.y);
+        w.u8(self.a);
+        w.u8(self.b);
+        w.u8(self.np);
+        w.u8(self.sp);
+        w.u8(self.flags);
+        w.u32(self.call_depth);
+        w.u64(self.tick_counter);
+        w.u64(self.clk_timer_timestamp);
+        w.u64(self.prog_timer_timestamp);
+        w.u8(self.prog_timer_enabled as u8);
+        w.u8(self.prog_timer_data);
+        w.u8(self.prog_timer_rld);
+        w.u8(self.previous_cycles);
+        w.u8(self.paused as u8);
+        for int in &self.interrupts {
+            w.u8(int.factor_flag_reg);
+            w.u8(int.mask_reg);
+            w.u8(int.triggered as u8);
+            w.u8(int.vector);
+        }
+        w.bytes(&self.memory);
+        w.bytes(&self.lcd.matrix);
+        for icon in &self.lcd.icons {
+            w.u8(*icon as u8);
+        }
+        debug_assert_eq!(w.pos(), STATE_LEN, "state layout drifted from STATE_LEN");
+    }
+
+    /// Restore a state produced by [`Tama::save_state`].
+    pub fn restore_state(&mut self, bytes: &[u8; STATE_LEN]) {
+        let mut r = Reader::new(bytes);
+        self.pc = r.u16();
+        self.next_pc = r.u16();
+        self.x = r.u16();
+        self.y = r.u16();
+        self.a = r.u8();
+        self.b = r.u8();
+        self.np = r.u8();
+        self.sp = r.u8();
+        self.flags = r.u8();
+        self.call_depth = r.u32();
+        self.tick_counter = r.u64();
+        self.clk_timer_timestamp = r.u64();
+        self.prog_timer_timestamp = r.u64();
+        self.prog_timer_enabled = r.u8() != 0;
+        self.prog_timer_data = r.u8();
+        self.prog_timer_rld = r.u8();
+        self.previous_cycles = r.u8();
+        self.paused = r.u8() != 0;
+        for int in self.interrupts.iter_mut() {
+            int.factor_flag_reg = r.u8();
+            int.mask_reg = r.u8();
+            int.triggered = r.u8() != 0;
+            int.vector = r.u8();
+        }
+        r.bytes(&mut self.memory);
+        r.bytes(&mut self.lcd.matrix);
+        for icon in self.lcd.icons.iter_mut() {
+            *icon = r.u8() != 0;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1529,6 +1606,97 @@ static OPS: [OpEntry; 108] = [
     OpEntry { code: 0xD0F, mask: 0xFCF, shift_arg0: 4, mask_arg0: 0, cycles: 7, cb: op_not },
 ];
 
+/// Number of bytes in a serialized [`Tama`] state.
+///
+/// See [`Tama::save_state`] for the layout. `save_state` asserts in debug builds
+/// that it writes exactly this many bytes, so the constant cannot silently drift.
+pub const STATE_LEN: usize = 462;
+
+/// Little-endian byte writer used by [`Tama::save_state`].
+struct Writer<'a> {
+    buf: &'a mut [u8],
+    pos: usize,
+}
+
+impl<'a> Writer<'a> {
+    fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf, pos: 0 }
+    }
+
+    fn pos(&self) -> usize {
+        self.pos
+    }
+
+    fn u8(&mut self, v: u8) {
+        self.buf[self.pos] = v;
+        self.pos += 1;
+    }
+
+    fn u16(&mut self, v: u16) {
+        self.buf[self.pos..self.pos + 2].copy_from_slice(&v.to_le_bytes());
+        self.pos += 2;
+    }
+
+    fn u32(&mut self, v: u32) {
+        self.buf[self.pos..self.pos + 4].copy_from_slice(&v.to_le_bytes());
+        self.pos += 4;
+    }
+
+    fn u64(&mut self, v: u64) {
+        self.buf[self.pos..self.pos + 8].copy_from_slice(&v.to_le_bytes());
+        self.pos += 8;
+    }
+
+    fn bytes(&mut self, v: &[u8]) {
+        self.buf[self.pos..self.pos + v.len()].copy_from_slice(v);
+        self.pos += v.len();
+    }
+}
+
+/// Little-endian byte reader used by [`Tama::restore_state`].
+struct Reader<'a> {
+    buf: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn new(buf: &'a [u8]) -> Self {
+        Self { buf, pos: 0 }
+    }
+
+    fn u8(&mut self) -> u8 {
+        let v = self.buf[self.pos];
+        self.pos += 1;
+        v
+    }
+
+    fn u16(&mut self) -> u16 {
+        let mut b = [0u8; 2];
+        b.copy_from_slice(&self.buf[self.pos..self.pos + 2]);
+        self.pos += 2;
+        u16::from_le_bytes(b)
+    }
+
+    fn u32(&mut self) -> u32 {
+        let mut b = [0u8; 4];
+        b.copy_from_slice(&self.buf[self.pos..self.pos + 4]);
+        self.pos += 4;
+        u32::from_le_bytes(b)
+    }
+
+    fn u64(&mut self) -> u64 {
+        let mut b = [0u8; 8];
+        b.copy_from_slice(&self.buf[self.pos..self.pos + 8]);
+        self.pos += 8;
+        u64::from_le_bytes(b)
+    }
+
+    fn bytes(&mut self, out: &mut [u8]) {
+        out.copy_from_slice(&self.buf[self.pos..self.pos + out.len()]);
+        self.pos += out.len();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1685,6 +1853,65 @@ mod tests {
         assert_eq!(t.tick_counter(), 5);
         t.run_step();
         assert_eq!(t.tick_counter(), 10);
+    }
+
+    #[test]
+    fn state_round_trips() {
+        let rom = rom_with(&[0xE05, 0xC03, 0xF80]);
+        let mut t = Tama::new(rom);
+        for _ in 0..3 {
+            t.run_step();
+        }
+        t.set_button(Button::Middle, ButtonState::Pressed);
+        t.set_memory(0xE10, 0x3); // light icons 0 and 1
+
+        let mut saved = [0u8; STATE_LEN];
+        t.save_state(&mut saved);
+
+        // A machine restored from the buffer must be indistinguishable.
+        let mut u = Tama::new(rom);
+        u.restore_state(&saved);
+        assert_eq!(u.get_memory(0), t.get_memory(0));
+        assert_eq!(u.tick_counter(), t.tick_counter());
+        assert_eq!(u.lcd().matrix, t.lcd().matrix);
+        assert_eq!(u.lcd().icons, t.lcd().icons);
+        assert!(u.needs_attention());
+
+        // ...and must keep evolving identically.
+        for _ in 0..5 {
+            t.run_step();
+            u.run_step();
+        }
+        let mut a = [0u8; STATE_LEN];
+        let mut b = [0u8; STATE_LEN];
+        t.save_state(&mut a);
+        u.save_state(&mut b);
+        assert_eq!(a, b, "restored machine diverged");
+    }
+
+    #[test]
+    fn restore_is_exact_after_a_varied_run() {
+        // A CALL/RET loop exercises the stack, call depth and the timers.
+        let mut words = vec![0u16; 0x1800];
+        words[0x100] = 0x410; // CALL 0x10
+        words[0x110] = 0xE05; // LD A, 5
+        words[0x111] = 0xFDF; // RET
+        let rom = pack(&words);
+
+        let mut t = Tama::new(rom);
+        t.set_button(Button::Left, ButtonState::Pressed);
+        for _ in 0..50_000 {
+            t.run_step();
+        }
+
+        let mut saved = [0u8; STATE_LEN];
+        t.save_state(&mut saved);
+
+        let mut u = Tama::new(rom);
+        u.restore_state(&saved);
+        let mut round_tripped = [0u8; STATE_LEN];
+        u.save_state(&mut round_tripped);
+        assert_eq!(saved, round_tripped, "restore did not reproduce the state");
     }
 }
 

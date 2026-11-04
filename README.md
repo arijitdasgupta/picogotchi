@@ -88,6 +88,26 @@ out entirely (`DEFMT_LOG=off`) and reboots on panic instead of halting, so a
 fault self-heals rather than leaving the pet dead until it is power-cycled. The
 pet's state is RAM-only, so a panic costs a fresh egg.
 
+## Saved state
+
+The pet is saved to flash so it survives a power cycle. Production writes once
+an hour; development writes every two minutes, so save and restore can be
+exercised in a single session.
+
+The last 32 KiB of flash is reserved for it, carved out of the linker's `FLASH`
+region in `firmware/memory.x` so code can never be placed in a sector the
+storage layer erases. It is a ring of eight 4 KiB sectors: each save writes one
+512-byte record (magic, sequence, version, CRC, then the state) to the next
+sector, so a sector is erased once per eight saves. At an hourly cadence that is
+~91 years of flash life; even at the development cadence it is years.
+
+**The save survives a firmware update.** A UF2 only carries the application
+sectors (`0x10000000`-`0x1000B200`), so the bootloader never touches the save
+region, and updating the firmware keeps your pet.
+
+To start fresh in development, use `firmware/flash-clean.sh`, which erases the
+flash before flashing so no stale pet is restored.
+
 ## Notes
 
 - The screen refreshes at ~3 fps, matching the reference implementation.

@@ -224,6 +224,51 @@ via the watchdog tick, so it survives a `clk_sys` change; but `clk_peri` follows
 `clk_sys`, so the I2C baud divisor must be recomputed (pass the new frequency to
 `I2C::i2c1`).
 
+## Saved state
+
+`firmware/src/storage.rs` persists the pet so it survives a power cycle. The core
+crate provides the payload: `Tama::save_state` / `restore_state` serialize a fixed
+462-byte layout (`STATE_LEN`), field by field and little-endian so it cannot drift
+with struct padding. The display is included, because the ROM's LCD state lives
+only in the matrix — display memory reads back as zero.
+
+- **Region.** `memory.x` holds back the last 32 KiB of flash as the `SAVE` region
+  and carves it out of `FLASH`, so the linker can never place code in a sector
+  that gets erased. The address reaches Rust through the `__save_start` /
+  `__save_end` linker symbols, so there is one source of truth.
+- **Ring.** Eight 4 KiB sectors; each save writes a 512-byte record at the start
+  of the next sector, so a sector is erased once per eight saves. Boot scans all
+  sectors and takes the highest valid sequence, so a save interrupted by a power
+  cut is simply ignored (magic / version / length / CRC all have to pass).
+- **Cadence.** `SAVE_INTERVAL_US`, selected by the `production` feature: hourly
+  in production, two minutes in development so the round trip can be tested
+  without waiting.
+- **Bump `VERSION` whenever the record layout changes.** A layout change that kept
+  the same version *and* length would still pass the CRC and restore into the
+  wrong fields.
+
+### Writing flash is the delicate part
+
+XIP is unavailable while flash is being written, so the code doing the erase must
+run from RAM. `write_record` is `#[inline(never)]` in `.data.flash_ops`, which
+cortex-m-rt copies to SRAM at startup — verify with the symbol table that it lands
+at `0x2000_xxxx`, not in `.text`. **It must not call anything else that lives in
+flash**, so the ROM entry points are resolved while XIP is still up (the HAL
+generates a `ptr()` accessor per ROM function) and passed in as pointers. The
+sequence mirrors the pico-sdk: `connect_internal_flash`, `flash_exit_xip`, the
+operation, `flash_flush_cache`. Unlike RP2040 there is no XIP-mode restore
+afterwards; the RP2350 ROM does it.
+
+Interrupts are masked across the whole operation, because the TIMER0 handler also
+lives in flash and would fault with XIP down. The erase stalls XIP for tens of
+milliseconds, so the emulator falls behind and catches up on the next loop.
+
+### Clearing the save in development
+
+`firmware/flash-clean.sh` erases the flash before flashing, so no stale pet is
+restored. Note that `probe-rs` 0.31.0 erases RP235x flash but never returns from
+`erase`, so the script runs it in the background and reaps it after 12 s.
+
 ## Logging
 
 `defmt` over RTT. `DEFMT_LOG = "debug"` is set in `firmware/.cargo/config.toml`.

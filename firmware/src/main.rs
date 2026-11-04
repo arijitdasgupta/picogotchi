@@ -12,6 +12,7 @@
 //! There is no buzzer.
 
 mod rom;
+mod storage;
 
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -105,6 +106,17 @@ const LIT_BATCH_US: u32 = 1_000;
 /// 10 ms sample rate still registers a press.
 const DARK_BATCH_US: u32 = 10_000;
 
+/// How often the emulated state is written to flash.
+///
+/// Production writes hourly: ~11 years of life on a single sector, ~91 years
+/// across the eight-sector ring. Development uses a much shorter interval so
+/// that save and restore can be exercised in a single session (a few hundred
+/// erases out of 800,000).
+#[cfg(feature = "production")]
+const SAVE_INTERVAL_US: u64 = 60 * 60 * 1_000_000;
+#[cfg(not(feature = "production"))]
+const SAVE_INTERVAL_US: u64 = 2 * 60 * 1_000_000;
+
 /// The TIMER0 alarm that wakes the core out of `wfi`. It is shared with the
 /// interrupt handler, which is the only thing that re-arms it.
 static WAKE_ALARM: Mutex<RefCell<Option<Alarm0<CopyableTimer0>>>> = Mutex::new(RefCell::new(None));
@@ -195,8 +207,15 @@ fn main() -> ! {
     let mut tama = Tama::new(&rom::G_PROGRAM_B12);
     let ticks_per_second = Tama::tick_frequency();
 
+    // Bring back a previous pet if flash holds a valid save.
+    match storage::restore(&mut tama) {
+        Some(sequence) => info!("restored save #{}", sequence),
+        None => info!("no save found; starting fresh"),
+    }
+
     let start = timer.get_counter().ticks();
     let mut next_frame = 0u64;
+    let mut next_save_us = start + SAVE_INTERVAL_US;
     let mut reported_pause = false;
     let mut prev_switches = (false, false, false);
     let mut deb_left = Debouncer::new(DEBOUNCE_US);
@@ -286,6 +305,17 @@ fn main() -> ! {
             let _ = display.clear(BinaryColor::Off);
             let _ = display::draw(&mut display, tama.lcd());
             let _ = display.flush();
+        }
+
+        // Persist the pet periodically. The write blocks for tens of
+        // milliseconds while a sector is erased, so it happens between batches
+        // and the emulator catches up afterwards.
+        if now_us >= next_save_us {
+            next_save_us = now_us + SAVE_INTERVAL_US;
+            let mut state = [0u8; tama::STATE_LEN];
+            tama.save_state(&mut state);
+            let sequence = storage::save(&state);
+            info!("saved state #{}", sequence);
         }
 
         // Sleep until the next batch rather than spinning. The wake-up is
