@@ -167,6 +167,45 @@ path. Edit `firmware/memory.x`, not `build.rs`, to change the memory layout.
   (python3 only, no dependencies). The UF2 family ID for an Arm Secure image is
   `0xe48bff59`.
 
+## Power management
+
+**Panel.** `display.set_display_on(false)` blanks the OLED after
+`IDLE_TIMEOUT_US` (60 s) with no input, and only while `Tama::needs_attention()`
+is false. Attention is "any status icon lit" — the pet's own way of asking for
+something. The press that wakes the panel is consumed (`suppress_until_release`)
+so you never act on a screen you could not see. The emulator keeps stepping while
+blanked, so the pet's clock and ageing are unaffected, and the framebuffer lives
+in MCU RAM so waking repaints immediately rather than waiting for the next frame.
+
+**Core.** The core sleeps in `wfi` between emulator batches rather than spinning.
+The wake source is TIMER0 alarm 0 (`TIMER0_IRQ_0`), whose handler only clears and
+re-arms the alarm. **The alarm must free-run** (the handler re-arms it, rather
+than the main loop arming it once per iteration): arming once per loop loses the
+wake-up whenever the alarm fires between arming and reaching `wfi`, and the core
+then sleeps forever. Period is `LIT_BATCH_US` (1 ms) while the panel is lit and
+`DARK_BATCH_US` (10 ms) while blanked, held in `WAKE_PERIOD_US`.
+
+Batching does not skip work: `target_ticks` still comes from the wall clock, so
+the catch-up loop executes every instruction that came due.
+
+The on-board LED on GP25 is driven low.
+
+**Why the system clock is still 150 MHz.** With the core asleep most of the time,
+the average draw is dominated by the *sleep* current, not the run frequency.
+Lowering `clk_sys` does not by itself stop PLL_SYS, and it makes each burst longer
+(same cycles, slower clock), during which leakage is drawn for longer — so it is
+not the easy win it appears to be. Cutting the sleep current means stopping
+clocks/PLLs during sleep: the RP2350 SLEEP state's `sleep_en0/1` registers via
+`ClocksManager::configure_sleep_enable(ClockGate)`, or DORMANT. Both need
+datasheet-level register work (the PAC exposes `sleep_en0` as a raw register with
+no named bitfields) and a power measurement to justify; a wrong bit (e.g. gating
+`clk_ref`) stops the timer and the core never wakes.
+
+Two facts to remember if this is revisited: the 1 MHz timer comes from the XOSC
+via the watchdog tick, so it survives a `clk_sys` change; but `clk_peri` follows
+`clk_sys`, so the I2C baud divisor must be recomputed (pass the new frequency to
+`I2C::i2c1`).
+
 ## Logging
 
 `defmt` over RTT. `DEFMT_LOG = "debug"` is set in `firmware/.cargo/config.toml`.

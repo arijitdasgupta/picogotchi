@@ -89,6 +89,11 @@ the `RPI-RP2` mass storage device. The board reboots and starts the emulator.
 - The emulated CPU is paced to its real 32 768 Hz clock using the 1 MHz timer, so
   the pet ages at the correct rate.
 - Inputs are debounced with a 20 ms window (`firmware/src/main.rs`).
+- The panel blanks after a minute with no input, and only while the pet is not
+  signalling that it needs something. Press any switch to wake it; that press is
+  consumed, so the next one acts. The pet keeps running while blanked.
+- The core sleeps between emulator batches rather than spinning, and the on-board
+  LED is off.
 - In the egg state only the **middle** switch does anything: press it to enter
   clock setup, then use left/right to set the time. Until the clock is set the
   pet does not hatch, which can look like the other switches doing nothing.
