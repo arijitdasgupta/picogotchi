@@ -54,7 +54,7 @@ a `[build] target`.
 | Left switch | GP16 |
 | Mid switch  | GP17 |
 | Right switch| GP18 |
-| Status LED  | GP25 |
+| LED (unused)| GP25 |
 
 I2C1 runs at 1 MHz. Switches are active low with internal pull-ups. Pin
 assignments are repeated in `firmware/src/main.rs`.

@@ -241,6 +241,16 @@ impl Tama {
         &self.lcd
     }
 
+    /// True when the pet is signalling that it needs something.
+    ///
+    /// On the P1 the status icons are how the pet asks for attention (hungry,
+    /// unhappy, wants the light, and so on), so "any icon lit" is the signal the
+    /// firmware uses to keep the screen awake. Narrow this to specific icons if
+    /// it turns out to keep the screen on too often.
+    pub fn needs_attention(&self) -> bool {
+        self.lcd.icons.iter().any(|&lit| lit)
+    }
+
     /// Ticks per second of the emulated CPU.
     pub const fn tick_frequency() -> u64 {
         TICK_FREQUENCY
@@ -1632,6 +1642,21 @@ mod tests {
         assert!(t.lcd().icons[2]);
         assert!(t.lcd().icons[3]);
         assert!(!t.lcd().icons[4]);
+    }
+
+    #[test]
+    fn attention_follows_the_icon_row() {
+        let rom = rom_with(&[0xE05]);
+        let mut t = Tama::new(rom);
+        assert!(!t.needs_attention());
+
+        // Segment 8 (display word 0xE10), com 0 -> icon 0 lit.
+        t.set_memory(0xE10, 0x1);
+        assert!(t.needs_attention());
+
+        // Clearing the icon clears the attention flag again.
+        t.set_memory(0xE10, 0x0);
+        assert!(!t.needs_attention());
     }
 
     #[test]

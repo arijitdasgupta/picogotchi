@@ -19,7 +19,7 @@ same Tamagotchi P1 ROM as the Arduino version.
 | Left switch | GP16       |
 | Mid switch  | GP17       |
 | Right switch| GP18       |
-| Status LED  | GP25       |
+| LED (unused)| GP25       |
 
 The OLED is an I2C SSD1306 128x64 running on `I2C1` at 1 MHz. The three switches
 are active low (internal pull-ups): wire each one between its pin and GND. There
