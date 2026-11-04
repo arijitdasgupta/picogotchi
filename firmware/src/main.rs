@@ -20,11 +20,7 @@ use critical_section::Mutex;
 use cortex_m::peripheral::NVIC;
 use defmt::{info, warn};
 use defmt_rtt as _;
-use embedded_graphics::{
-    pixelcolor::BinaryColor,
-    prelude::*,
-    primitives::{PrimitiveStyle, Rectangle},
-};
+use embedded_graphics::{pixelcolor::BinaryColor, prelude::*};
 use embedded_hal::digital::{InputPin, OutputPin};
 use hal::fugit::{MicrosDurationU32, RateExtU32};
 // Development builds print panics over defmt and then halt, so they can be
@@ -120,10 +116,6 @@ const DARK_BATCH_US: u32 = 10_000;
 const SAVE_INTERVAL_US: u64 = 60 * 60 * 1_000_000;
 #[cfg(not(feature = "production"))]
 const SAVE_INTERVAL_US: u64 = 2 * 60 * 1_000_000;
-
-/// How long all three switches must be held to discard the saved pet. Ten
-/// seconds is long enough that it will not happen by accident in a pocket.
-const RESET_HOLD_US: u64 = 10 * 1_000_000;
 
 /// The TIMER0 alarm that wakes the core out of `wfi`. It is shared with the
 /// interrupt handler, which is the only thing that re-arms it.
@@ -224,7 +216,6 @@ fn main() -> ! {
     let start = timer.get_counter().ticks();
     let mut next_frame = 0u64;
     let mut next_save_us = start + SAVE_INTERVAL_US;
-    let mut combo_started_us: Option<u64> = None;
     let mut reported_pause = false;
     let mut prev_switches = (false, false, false);
     let mut deb_left = Debouncer::new(DEBOUNCE_US);
@@ -256,32 +247,6 @@ fn main() -> ! {
             info!("switch: left={} middle={} right={}", left, middle, right);
             prev_switches = (left, middle, right);
         }
-
-        // Holding all three switches is a deliberate factory reset: wipe the
-        // saved pet and reboot. The progress bar below is the only feedback, so
-        // it matters that the panel stays lit for the whole hold — which the
-        // input handling further down already arranges, since all three count
-        // as "pressed".
-        let reset_held_us = if left && middle && right {
-            let started = *combo_started_us.get_or_insert(now_us);
-            let held = now_us.saturating_sub(started);
-            if held >= RESET_HOLD_US {
-                info!("reset gesture: discarding the saved pet");
-                // Light the panel first, so there is something to look at while
-                // the erase stalls XIP for a few hundred milliseconds.
-                let _ = display.clear(BinaryColor::On);
-                let _ = display.flush();
-                storage::wipe();
-                hal::reboot::reboot(
-                    hal::reboot::RebootKind::Normal,
-                    hal::reboot::RebootArch::Normal,
-                );
-            }
-            Some(held)
-        } else {
-            combo_started_us = None;
-            None
-        };
 
         // Input and attention both extend how long the panel stays lit.
         let attention = tama.needs_attention();
@@ -339,15 +304,6 @@ fn main() -> ! {
             next_frame = elapsed_us + FRAME_PERIOD_US;
             let _ = display.clear(BinaryColor::Off);
             let _ = display::draw(&mut display, tama.lcd());
-            if let Some(held_us) = reset_held_us {
-                // Progress bar along the bottom edge while the reset is held.
-                let width = (128 * held_us / RESET_HOLD_US) as u32;
-                if width > 0 {
-                    let _ = Rectangle::new(Point::new(0, 60), Size::new(width, 4))
-                        .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-                        .draw(&mut display);
-                }
-            }
             let _ = display.flush();
         }
 

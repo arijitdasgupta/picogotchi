@@ -160,64 +160,35 @@ impl RomFlash {
     }
 }
 
-// The three functions below run with XIP unavailable, so they must execute from
-// RAM: they live in `.data`, which cortex-m-rt copies into SRAM at startup.
-// Everything they call has to be either another `.data.flash_ops` function or a
-// ROM entry point passed in as a pointer — calling anything that lives in flash,
-// or resolving a ROM pointer in here, would fault mid-operation. The caller masks
-// interrupts, since the TIMER0 handler also lives in flash.
-//
-// The sequence mirrors the pico-sdk's `flash_range_erase` /
-// `flash_range_program`: `connect_internal_flash`, `flash_exit_xip`, the
-// operation, then `flash_flush_cache` (which also releases the CSn IO force).
-// Unlike RP2040 there is no XIP-mode restore afterwards; the RP2350 ROM restores
-// it as part of the erase/program calls.
-
-/// Erase one sector.
+/// Erase `addr`'s sector and program `record` into it.
+///
+/// XIP is unavailable for the duration, so this runs from RAM: it lives in
+/// `.data`, which cortex-m-rt copies into SRAM at startup. Everything it calls
+/// is a ROM entry point passed in as a pointer — resolving them here, or calling
+/// any other function that lives in flash, would fault mid-erase.
+///
+/// The caller must have masked interrupts, since the TIMER0 handler also lives
+/// in flash.
+///
+/// Mirrors the sequence in the pico-sdk's `flash_range_erase` /
+/// `flash_range_program`: `connect_internal_flash`, `flash_exit_xip`, the
+/// operation, then `flash_flush_cache` (which also releases the CSn IO force).
+/// Unlike RP2040 there is no XIP-mode restore afterwards; the RP2350 ROM
+/// restores it as part of the erase/program calls.
 #[inline(never)]
 #[link_section = ".data.flash_ops"]
-unsafe fn erase_sector(rom: &RomFlash, addr: u32) {
+unsafe fn write_record(rom: &RomFlash, addr: u32, record: &[u8; RECORD_SIZE]) {
     let offset = addr - FLASH_BASE;
+
     (rom.connect)();
     (rom.exit_xip)();
     (rom.erase)(offset, SECTOR_SIZE as usize, SECTOR_SIZE, SECTOR_ERASE_CMD);
     (rom.flush)();
-}
 
-/// Program one record into an already-erased sector.
-#[inline(never)]
-#[link_section = ".data.flash_ops"]
-unsafe fn program_record(rom: &RomFlash, addr: u32, record: &[u8; RECORD_SIZE]) {
-    let offset = addr - FLASH_BASE;
     (rom.connect)();
     (rom.exit_xip)();
     (rom.program)(offset, record.as_ptr(), RECORD_SIZE);
     (rom.flush)();
-}
-
-/// Erase `addr`'s sector and program `record` into it.
-#[inline(never)]
-#[link_section = ".data.flash_ops"]
-unsafe fn write_record(rom: &RomFlash, addr: u32, record: &[u8; RECORD_SIZE]) {
-    erase_sector(rom, addr);
-    program_record(rom, addr, record);
-}
-
-/// Discard every saved pet by erasing the whole region.
-///
-/// Every sector is erased, not just the newest record's: the ring can hold valid
-/// records in several sectors, so erasing only the latest would let an older one
-/// win on the next boot and quietly undo the reset.
-pub fn wipe() {
-    let rom = RomFlash::resolve();
-    cortex_m::interrupt::free(|_| {
-        for sector in 0..num_sectors() {
-            let addr = region_start() + sector * SECTOR_SIZE;
-            // SAFETY: `addr` is sector-aligned inside the region reserved by
-            // memory.x, and the ROM entry points are valid for the chip.
-            unsafe { erase_sector(&rom, addr) };
-        }
-    });
 }
 
 /// Save `state` as the next record in the ring. Returns its sequence number.

@@ -269,21 +269,6 @@ milliseconds, so the emulator falls behind and catches up on the next loop.
 restored. Note that `probe-rs` 0.31.0 erases RP235x flash but never returns from
 `erase`, so the script runs it in the background and reaps it after 12 s.
 
-### Resetting on the device
-
-Holding all three switches for `RESET_HOLD_US` (10 s) wipes the region and reboots
-through `hal::reboot`, so the pet hatches fresh. This works in both builds — it is
-a user-facing feature, not a development one.
-
-The only feedback is a progress bar along the bottom edge during the hold, plus a
-full-screen fill just before the wipe. That means the panel has to stay lit for
-the whole hold, which the existing "any switch pressed resets the idle timer" rule
-already arranges, and the reset press is consumed like any other waking press.
-
-`wipe` erases *every* sector rather than just the newest record's. The ring can
-hold valid records in several sectors, so erasing only the latest would let an
-older one win on the next boot and quietly undo the reset.
-
 ## Logging
 
 `defmt` over RTT. `DEFMT_LOG = "debug"` is set in `firmware/.cargo/config.toml`.
