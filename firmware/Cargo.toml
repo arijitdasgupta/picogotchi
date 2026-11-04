@@ -21,3 +21,8 @@ ssd1306 = "0.9.0"
 embedded-graphics = "0.8.1"
 critical-section = "1.1.3"
 tama = { path = "../tama" }
+
+[features]
+# Production build: reboot on panic instead of halting. Pair it with
+# `DEFMT_LOG=off` so the log calls are compiled out; see make-uf2.sh.
+production = []

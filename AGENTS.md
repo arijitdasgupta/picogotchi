@@ -167,6 +167,24 @@ path. Edit `firmware/memory.x`, not `build.rs`, to change the memory layout.
   (python3 only, no dependencies). The UF2 family ID for an Arm Secure image is
   `0xe48bff59`.
 
+## Production build
+
+`make-uf2.sh` builds with `DEFMT_LOG=off` and `--features production`, which is
+not the same as a plain `cargo build --release`:
+
+- **`DEFMT_LOG=off`** compiles the defmt log calls out entirely. Cargo's `[env]`
+  is not profile-scoped, so this cannot be expressed in `.cargo/config.toml` and
+  has to be set on the command line. Note that without a debugger attached
+  defmt-rtt is in its non-blocking mode, so leftover log calls would silently
+  drop data rather than hang — which is why this is easy to miss.
+- **`--features production`** swaps the `panic-probe` handler (print, then halt)
+  for one that reboots via `hal::reboot`, so a fault self-heals instead of
+  leaving the pet dead until it is power-cycled. The emulated pet's state is
+  RAM-only, so a panic costs a fresh egg.
+
+There is no watchdog yet: a hang that is not a panic (for example a stuck `wfi`
+if the wake alarm is ever misconfigured) still needs a power cycle.
+
 ## Power management
 
 **Panel.** `display.set_display_on(false)` blanks the OLED after

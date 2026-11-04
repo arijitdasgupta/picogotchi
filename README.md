@@ -83,6 +83,11 @@ dependency-free converter `firmware/tools/elf2uf2.py` (needs only `python3`).
 To flash: hold **BOOTSEL** while plugging the board in, then copy the `.uf2` onto
 the `RPI-RP2` mass storage device. The board reboots and starts the emulator.
 
+Unlike a plain `cargo build --release`, this build compiles the defmt log calls
+out entirely (`DEFMT_LOG=off`) and reboots on panic instead of halting, so a
+fault self-heals rather than leaving the pet dead until it is power-cycled. The
+pet's state is RAM-only, so a panic costs a fresh egg.
+
 ## Notes
 
 - The screen refreshes at ~3 fps, matching the reference implementation.

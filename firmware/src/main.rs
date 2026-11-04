@@ -22,6 +22,9 @@ use defmt_rtt as _;
 use embedded_graphics::{pixelcolor::BinaryColor, prelude::*};
 use embedded_hal::digital::{InputPin, OutputPin};
 use hal::fugit::{MicrosDurationU32, RateExtU32};
+// Development builds print panics over defmt and then halt, so they can be
+// inspected. Production builds reboot instead; see `panic` below.
+#[cfg(not(feature = "production"))]
 use panic_probe as _;
 use rp235x_hal::{
     self as hal,
@@ -34,6 +37,18 @@ use rp235x_hal::{
 };
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 use tama::{debounce::Debouncer, display, Button, ButtonState, Tama};
+
+/// Production panic handler.
+///
+/// `panic-probe` (used in development) prints and then halts, which on a battery
+/// powered board leaves the pet dead until it is power-cycled. Reboot through
+/// the Boot ROM instead so the firmware restarts by itself. The emulated pet's
+/// state is RAM-only, so a panic costs a fresh egg.
+#[cfg(feature = "production")]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    hal::reboot::reboot(hal::reboot::RebootKind::Normal, hal::reboot::RebootArch::Normal)
+}
 
 /// Tell the Boot ROM about our application (required to boot on RP2350).
 #[link_section = ".start_block"]

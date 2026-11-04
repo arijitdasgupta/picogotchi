@@ -15,7 +15,10 @@ elf="$out_dir/picogotchi"
 uf2="$out_dir/picogotchi.uf2"
 
 cd "$here"
-cargo build --release
+# Production build: DEFMT_LOG=off compiles the defmt log calls out entirely
+# (cargo's [env] is not profile-scoped, so it has to be set here), and the
+# `production` feature reboots on panic instead of halting.
+DEFMT_LOG=off cargo build --release --features production
 
 if command -v picotool >/dev/null 2>&1; then
     picotool uf2 convert -t elf "$elf" "$uf2"
