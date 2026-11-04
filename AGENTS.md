@@ -240,9 +240,9 @@ only in the matrix — display memory reads back as zero.
   of the next sector, so a sector is erased once per eight saves. Boot scans all
   sectors and takes the highest valid sequence, so a save interrupted by a power
   cut is simply ignored (magic / version / length / CRC all have to pass).
-- **Cadence.** `SAVE_INTERVAL_US`, selected by the `production` feature: hourly
-  in production, two minutes in development so the round trip can be tested
-  without waiting.
+- **Cadence.** `SAVE_INTERVAL_US`, hourly. Wear is not a constraint at that rate
+  (~91 years across the ring), so it is a single constant rather than a
+  build-dependent one; shorten it temporarily if a save needs exercising.
 - **Bump `VERSION` whenever the record layout changes.** A layout change that kept
   the same version *and* length would still pass the CRC and restore into the
   wrong fields.

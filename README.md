@@ -90,9 +90,7 @@ pet's state is RAM-only, so a panic costs a fresh egg.
 
 ## Saved state
 
-The pet is saved to flash so it survives a power cycle. Production writes once
-an hour; development writes every two minutes, so save and restore can be
-exercised in a single session.
+The pet is saved to flash so it survives a power cycle, once an hour.
 
 The last 32 KiB of flash is reserved for it, carved out of the linker's `FLASH`
 region in `firmware/memory.x` so code can never be placed in a sector the

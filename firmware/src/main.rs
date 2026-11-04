@@ -108,14 +108,11 @@ const DARK_BATCH_US: u32 = 10_000;
 
 /// How often the emulated state is written to flash.
 ///
-/// Production writes hourly: ~11 years of life on a single sector, ~91 years
-/// across the eight-sector ring. Development uses a much shorter interval so
-/// that save and restore can be exercised in a single session (a few hundred
-/// erases out of 800,000).
-#[cfg(feature = "production")]
+/// Hourly: about 11 years of life on a single sector and ~91 years across the
+/// eight-sector ring, so wear is not a constraint and this does not need to
+/// differ between builds. Shorten it temporarily if a save needs exercising
+/// within one session — even at two minutes the ring still lasts years.
 const SAVE_INTERVAL_US: u64 = 60 * 60 * 1_000_000;
-#[cfg(not(feature = "production"))]
-const SAVE_INTERVAL_US: u64 = 2 * 60 * 1_000_000;
 
 /// The TIMER0 alarm that wakes the core out of `wfi`. It is shared with the
 /// interrupt handler, which is the only thing that re-arms it.
