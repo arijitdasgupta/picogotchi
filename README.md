@@ -2,7 +2,7 @@
 
 ## A Tamagotchi P1 emulator for the Raspberry Pi Pico 2
 
-[Picogotchi](https://pictures.donermitalles.net/image/aiRS)
+![Picogotchi](https://pictures.donermitalles.net/image/aiRS)
 
 ### Running on RP2350 (Raspberry Pi Pico 2) with an SSD1306 128 x 64 display
 
