@@ -108,6 +108,10 @@ region, and updating the firmware keeps your pet.
 To start fresh in development, use `firmware/flash-clean.sh`, which erases the
 flash before flashing so no stale pet is restored.
 
+To reset on the device itself, hold **all three switches for ten seconds**: a
+progress bar fills along the bottom edge, then the screen goes white, the saved
+pet is erased, and the board reboots to a fresh egg.
+
 ## Notes
 
 - The screen refreshes at ~3 fps, matching the reference implementation.
