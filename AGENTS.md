@@ -129,8 +129,12 @@ catches up, then rendering at ~3 fps.
 32x16 LCD is scaled 3x (2x2 blocks on a 3 px pitch) and offset 16 px to centre
 it, and the eight 16x9 icons are drawn along the bottom at `y = 49` with a
 selection triangle above each active icon. Icon bitmaps are XBM (LSB is the
-leftmost pixel). Icons 0..7 always show their glyph; the last icon only shows
-when active, matching the reference.
+leftmost pixel). All eight glyphs are always drawn; the reference skips the last
+one unless it is active, which stops the row at x=108 and makes the whole screen
+look left-aligned. With all eight drawn the row spans x=4..124, i.e. centred.
+
+`cargo run -p tama --example dump_lcd -- <rom>` prints the emulated LCD and the
+final 128x64 image as ASCII, which is the quickest way to check layout changes.
 
 ## RP2350 boot requirements (easy to break)
 

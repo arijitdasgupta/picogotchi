@@ -54,19 +54,17 @@ where
         }
     }
 
-    // Icon row. Icons 0..7 always show their glyph; the last icon only shows
-    // when active. This matches `drawTamaSelection()` in the reference.
+    // Icon row: eight 16 px cells across the full width, so the row is centred.
+    // Every glyph is drawn; a selection triangle marks the active ones.
+    //
+    // The reference skips the last glyph unless it is active, which leaves the
+    // row spanning only x=4..108 and makes the whole screen look left-aligned.
     for i in 0..ICON_NUM {
         let x = i as i32 * 16;
-        if i < ICON_NUM - 1 {
-            if lcd.icons[i] {
-                draw_triangle(target, x + 5, ICONS_Y)?;
-            }
-            draw_icon(target, x + 4, ICONS_Y + 6, i)?;
-        } else if lcd.icons[i] {
+        if lcd.icons[i] {
             draw_triangle(target, x + 5, ICONS_Y)?;
-            draw_icon(target, x + 4, ICONS_Y + 6, i)?;
         }
+        draw_icon(target, x + 4, ICONS_Y + 6, i)?;
     }
 
     Ok(())
@@ -144,6 +142,35 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    fn lit_x_bounds(f: &Fake) -> (i32, i32) {
+        let (mut min_x, mut max_x) = (128i32, -1i32);
+        for y in 0..64usize {
+            for x in 0..128usize {
+                if f.get(x, y) {
+                    min_x = min_x.min(x as i32);
+                    max_x = max_x.max(x as i32);
+                }
+            }
+        }
+        (min_x, max_x)
+    }
+
+    #[test]
+    fn icon_row_is_centred() {
+        let lcd = Lcd::new();
+        let mut f = Fake::new();
+        draw(&mut f, &lcd).unwrap();
+
+        // With no LCD pixels and no active icons only the eight icon glyphs are
+        // drawn. All eight must be present, otherwise the row stops short on the
+        // right and the whole screen looks left-aligned.
+        let (min_x, max_x) = lit_x_bounds(&f);
+        assert!(min_x <= 5, "icon row starts too far right: x={min_x}");
+        assert!(max_x >= 123, "icon row stops too early: x={max_x}");
+        let skew = (min_x + max_x - 127).abs();
+        assert!(skew <= 2, "icon row is not centred (skew {skew}): {min_x}..{max_x}");
     }
 
     #[test]
