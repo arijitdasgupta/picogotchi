@@ -204,9 +204,15 @@ fn main() -> ! {
     let mut tama = Tama::new(&rom::G_PROGRAM_B12);
     let ticks_per_second = Tama::tick_frequency();
 
-    // Bring back a previous pet if flash holds a valid save.
+    // Bring back a previous pet if flash holds a valid save. The counters are
+    // rebased so the pacing loop below starts from zero rather than seeing the
+    // emulator as permanently ahead of the wall clock — which would freeze it.
     match storage::restore(&mut tama) {
-        Some(sequence) => info!("restored save #{}", sequence),
+        Some(sequence) => {
+            let carried_over = tama.tick_counter();
+            tama.rebase_clock();
+            info!("restored save #{} ({} ticks rebased)", sequence, carried_over);
+        }
         None => info!("no save found; starting fresh"),
     }
 

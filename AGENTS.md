@@ -166,6 +166,15 @@ path. Edit `firmware/memory.x`, not `build.rs`, to change the memory layout.
   with `picotool` when available, otherwise with `firmware/tools/elf2uf2.py`
   (python3 only, no dependencies). The UF2 family ID for an Arm Secure image is
   `0xe48bff59`.
+- **A frozen display with no RTT output is usually the debug link, not the
+  firmware.** probe-rs intermittently fails to reset RP235x cleanly after
+  flashing: the core is left halted, so the display stops updating and no logs
+  arrive, while `Target device did not respond to request` and `Failed to
+  deconfigure device during shutdown` show up on exit. **Power-cycle the board
+  before suspecting the firmware.**
+- If the pet is frozen but the panel still blanks and switch presses still log,
+  the loop is fine and it is the *pacing* that has stopped — see `rebase_clock`
+  in the saved-state section.
 
 ## Production build
 
@@ -246,6 +255,14 @@ only in the matrix — display memory reads back as zero.
 - **Bump `VERSION` whenever the record layout changes.** A layout change that kept
   the same version *and* length would still pass the CRC and restore into the
   wrong fields.
+- **`rebase_clock()` after restoring.** The firmware paces the emulator against a
+  wall clock that restarts at zero each boot, while a restored state arrives with
+  its tick counter already advanced by however long the previous session ran.
+  Without the rebase the pacing loop sees the emulator as permanently ahead and
+  never steps it — a pet frozen for as long as the previous session lasted, on a
+  firmware whose blanking, button logging and hourly saves all still work
+  (they are wall-clock driven). Only counter *differences* are ever used, so
+  shifting all three counters down is behaviour-preserving.
 
 ### Writing flash is the delicate part
 

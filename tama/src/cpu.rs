@@ -718,6 +718,25 @@ impl Tama {
             *icon = r.u8() != 0;
         }
     }
+
+    /// Shift the tick counters so [`Tama::tick_counter`] restarts from zero.
+    ///
+    /// A restored state arrives with its counter already advanced by however long
+    /// the previous session ran, while the firmware paces the emulator against a
+    /// wall clock that starts at zero when the firmware boots. Without this the
+    /// pacing loop would consider the emulator permanently ahead of the clock and
+    /// never step it: a frozen pet on a firmware that otherwise looks perfectly
+    /// healthy.
+    ///
+    /// Only differences between the counters are ever used — the timers compare
+    /// them with `wrapping_sub` — so shifting all three by the same amount leaves
+    /// behaviour unchanged.
+    pub fn rebase_clock(&mut self) {
+        let offset = self.tick_counter;
+        self.tick_counter = self.tick_counter.wrapping_sub(offset);
+        self.clk_timer_timestamp = self.clk_timer_timestamp.wrapping_sub(offset);
+        self.prog_timer_timestamp = self.prog_timer_timestamp.wrapping_sub(offset);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1912,6 +1931,38 @@ mod tests {
         let mut round_tripped = [0u8; STATE_LEN];
         u.save_state(&mut round_tripped);
         assert_eq!(saved, round_tripped, "restore did not reproduce the state");
+    }
+
+    #[test]
+    fn rebasing_the_clock_does_not_change_behaviour() {
+        let rom = rom_with(&[0xE05, 0xC03, 0xF80]);
+        let mut original = Tama::new(rom);
+        for _ in 0..50_000 {
+            original.run_step();
+        }
+
+        let mut saved = [0u8; STATE_LEN];
+        original.save_state(&mut saved);
+
+        let mut restored = Tama::new(rom);
+        restored.restore_state(&saved);
+        let carried_over = restored.tick_counter();
+        assert!(carried_over > 0, "the test needs a non-trivial tick count");
+        restored.rebase_clock();
+        assert_eq!(restored.tick_counter(), 0);
+
+        // The two must stay in step from here: same memory, same display, and
+        // counters that differ only by the rebase offset.
+        for _ in 0..5_000 {
+            original.run_step();
+            restored.run_step();
+        }
+        assert_eq!(
+            restored.tick_counter(),
+            original.tick_counter().wrapping_sub(carried_over)
+        );
+        assert_eq!(restored.get_memory(0), original.get_memory(0));
+        assert_eq!(restored.lcd().matrix, original.lcd().matrix);
     }
 }
 
